@@ -57,10 +57,15 @@ typedef struct Answer {
 	unsigned long int rrttl; // ResourceRecord Time To Live: Number of seconds ths should be remembered.
 	bool rrset;                    // Flush cache of records matching this name.
 	bool valid;           // False if problems were encountered decoding packet.
-
+	IPAddress ipAddress = IPADDR_ANY;
+	uint16_t port = 0;
 	void Display() const;    // Display a summary of this Answer on Serial port.
 } Answer;
 
+class MDns;
+
+typedef void (*MDNSPacketCallback)(const MDns*);
+typedef void (*MDNSQueryCallback)(const Query*);
 typedef void (*MDNSAnswerCallback)(const Answer*);
 
 class MDns {
@@ -120,6 +125,14 @@ public:
 	// Get the destination IP address of the packet (unicast or multicast)
 	IPAddress getDestinationIP();
 
+	void setPacketCallback(MDNSPacketCallback newCallback) {
+		this->_packetCallback = newCallback;
+	}
+
+	void setQueryCallback(MDNSQueryCallback newCallback) {
+		this->_queryCallback = newCallback;
+	}
+
 	void setAnswerCallback(MDNSAnswerCallback newCallback) {
 		this->_answerCallback = newCallback;
 	}
@@ -144,6 +157,8 @@ private:
 	unsigned int PopulateName(const char *name_buffer);
 	void PopulateAnswerResult(Answer *answer);
 
+	MDNSPacketCallback _packetCallback = NULL;
+	MDNSQueryCallback _queryCallback = NULL;
 	MDNSAnswerCallback _answerCallback = NULL;
 
 	WiFiUDP* udp;

@@ -47,7 +47,6 @@ bool MDns::loop() {
 		// read the data from it.
 		// but first save the source and destination IP
 		srcIP = udp->remoteIP();
-// FIXME		destIP = udp->destinationIP();
 		data_size = udp->read(data_buffer, max_packet_size);
 		if(data_size > largest_packet_seen)
 		{
@@ -83,10 +82,10 @@ bool MDns::loop() {
 		// Number of incoming Additional resource records.
 		ar_count = (data_buffer[10] << 8) + data_buffer[11];
 
-//		if (p_packet_function_) {
-//			// Since a callback function has been registered, execute it.
-//			p_packet_function_(this);
-//		}
+		if (_packetCallback) {
+			// Since a callback function has been registered, execute it.
+			_packetCallback(this);
+		}
 
 #ifdef DEBUG_OUTPUT
 		Display();
@@ -100,10 +99,10 @@ bool MDns::loop() {
 			Query query;
 			Parse_Query(query);
 			if (query.valid) {
-//				if (p_query_function_) {
-//					// Since a callback function has been registered, execute it.
-//					p_query_function_(&query);
-//				}
+				if (_queryCallback) {
+					// Since a callback function has been registered, execute it.
+					_queryCallback(&query);
+				}
 			}
 			if (buffer_pointer > data_size) {
 				return false;
@@ -178,7 +177,7 @@ unsigned int MDns::PopulateName(const char *name_buffer) {
 #endif
 				return 0;
 			}
-			data_buffer[buffer_pointer++] = (unsigned byte)word_length;
+			data_buffer[buffer_pointer++] = (byte)word_length;
 			for (int i = word_start; i < word_end; ++i) {
 				if (buffer_pointer >= data_size) {
 					buffer_pointer = buffer_pointer_start;
@@ -496,7 +495,11 @@ void MDns::PopulateAnswerResult(Answer *answer) {
 					data_buffer[buffer_pointer + 1],
 					data_buffer[buffer_pointer + 2],
 					data_buffer[buffer_pointer + 3]);
-			// TODO store as IPAddress here
+			answer->ipAddress = IPAddress(
+					data_buffer[buffer_pointer],
+					data_buffer[buffer_pointer + 1],
+					data_buffer[buffer_pointer + 2],
+					data_buffer[buffer_pointer + 3]);
 		} else {
 			sprintf(answer->rdata_buffer, "ipv4");
 		}
@@ -540,7 +543,7 @@ void MDns::PopulateAnswerResult(Answer *answer) {
 		port += data_buffer[buffer_pointer++];
 		sprintf(answer->rdata_buffer, "p=%d;w=%d;port=%d;host=", priority,
 				weight, port);
-		// TODO store port
+		answer->port = port;
 
 		buffer_pointer = nameFromDnsPointer(answer->rdata_buffer,
 				strlen(answer->rdata_buffer),
@@ -566,10 +569,6 @@ void MDns::PopulateAnswerResult(Answer *answer) {
 
 IPAddress MDns::getRemoteIP() {
 	return srcIP;
-}
-
-IPAddress MDns::getDestinationIP() {
-	return destIP;
 }
 
 MDns::~MDns() {
