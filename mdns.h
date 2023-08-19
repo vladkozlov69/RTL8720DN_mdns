@@ -42,7 +42,7 @@ typedef struct Query {
 	bool unicast_response;                  //
 	bool valid;           // False if problems were encountered decoding packet.
 
-	void Display() const;    // Display a summary of this Answer on Serial port.
+	void Display(Print * debug) const;    // Display a summary of this Answer on Serial port.
 } Query;
 
 // A single mDNS Answer.
@@ -57,22 +57,30 @@ typedef struct Answer {
 	unsigned long int rrttl; // ResourceRecord Time To Live: Number of seconds ths should be remembered.
 	bool rrset;                    // Flush cache of records matching this name.
 	bool valid;           // False if problems were encountered decoding packet.
-	IPAddress ipAddress = IPADDR_ANY;
+	IPAddress ipAddress = INADDR_NONE;
 	uint16_t port = 0;
-	void Display() const;    // Display a summary of this Answer on Serial port.
+	void Display(Print * debug) const;    // Display a summary of this Answer on Serial port.
 } Answer;
 
 class MDns;
 
-typedef void (*MDNSPacketCallback)(const MDns*);
-typedef void (*MDNSQueryCallback)(const Query*);
-typedef void (*MDNSAnswerCallback)(const Answer*);
+class Callback {
+public:
+	virtual ~Callback()
+	{
+		//
+	}
+	virtual void onPacket(const MDns* packet) {};
+	virtual void onQuery(const Query* query) {};
+	virtual void onAnswer(const Answer* answer) {};
+};
 
 class MDns {
 private:
+	Print * debug = NULL;
 public:
 
-	MDns(WiFiUDP& udp, byte *data_buffer_ = NULL, int max_packet_size_ = MAX_PACKET_SIZE):
+	MDns(WiFiUDP& udp, byte *data_buffer_ = NULL, int max_packet_size_ = MAX_PACKET_SIZE, Print * debug_ = &Serial):
 #ifdef DEBUG_STATISTICS
 		buffer_size_fail(0), largest_packet_seen(0), packet_count(0),
 #endif
@@ -86,6 +94,7 @@ public:
 			data_buffer = new byte[max_packet_size_];
 		}
 		this->udp = &udp;
+		this->debug = debug_;
 	};
 
 	~MDns();
@@ -125,17 +134,14 @@ public:
 	// Get the destination IP address of the packet (unicast or multicast)
 	IPAddress getDestinationIP();
 
-	void setPacketCallback(MDNSPacketCallback newCallback) {
-		this->_packetCallback = newCallback;
+	void setCallback(Callback * newCallback) {
+		this->_callback = newCallback;
 	}
 
-	void setQueryCallback(MDNSQueryCallback newCallback) {
-		this->_queryCallback = newCallback;
+	Callback * getCallback() {
+		return this->_callback;
 	}
 
-	void setAnswerCallback(MDNSAnswerCallback newCallback) {
-		this->_answerCallback = newCallback;
-	}
 #ifdef DEBUG_STATISTICS
 	// Counter gets increased every time an incoming mDNS packet arrives that does
 	// not fit in the data_buffer.
@@ -156,10 +162,9 @@ private:
 	void Parse_Answer(Answer &answer);
 	unsigned int PopulateName(const char *name_buffer);
 	void PopulateAnswerResult(Answer *answer);
+	void PrintHex(const unsigned char data) const;
 
-	MDNSPacketCallback _packetCallback = NULL;
-	MDNSQueryCallback _queryCallback = NULL;
-	MDNSAnswerCallback _answerCallback = NULL;
+	Callback * _callback = NULL;
 
 	WiFiUDP* udp;
 

@@ -8,16 +8,18 @@ extern struct netif xnetif[];
 namespace mdns {
 
 // Helper function to display formatted data.
-void PrintHex(const unsigned char data) {
-	char tmp[2];
-	sprintf(tmp, "%02X", data);
-	Serial.print(tmp);
-	Serial.print(" ");
+void MDns::PrintHex(const unsigned char data) const {
+	if (debug) {
+		char tmp[2];
+		sprintf(tmp, "%02X", data);
+		debug->print(tmp);
+		debug->print(" ");
+	}
 }
 
 uint8_t MDns::startUdpMulticast() {
 #ifdef DEBUG_OUTPUT
-	Serial.println("Initializing Multicast.");
+	debug->println("Initializing Multicast.");
 #endif
 	ip4_addr a1;
 	a1.addr = WiFi.localIP();
@@ -25,7 +27,7 @@ uint8_t MDns::startUdpMulticast() {
 	a2.addr = IPAddress(224, 0, 0, 251);
 
 	if (igmp_joingroup(&a1, &a2) != ERR_OK) {
-		Serial.println("igmp_joingroup error");
+		debug->println("igmp_joingroup error");
 	}
 	xnetif[0].flags |= NETIF_FLAG_IGMP;
 
@@ -34,7 +36,8 @@ uint8_t MDns::startUdpMulticast() {
 
 void MDns::begin() {
 #ifdef DEBUG_OUTPUT
-	Serial.println("Called begin");
+	if (debug)
+		debug->println("Called begin");
 #endif
 	this->startUdpMulticast();
 }
@@ -82,13 +85,14 @@ bool MDns::loop() {
 		// Number of incoming Additional resource records.
 		ar_count = (data_buffer[10] << 8) + data_buffer[11];
 
-		if (_packetCallback) {
+		if (_callback) {
 			// Since a callback function has been registered, execute it.
-			_packetCallback(this);
+			_callback->onPacket(this);
 		}
 
 #ifdef DEBUG_OUTPUT
-		Display();
+		if (debug)
+			Display();
 #endif  // DEBUG_OUTPUT
 
 		// Start of Data section.
@@ -99,16 +103,19 @@ bool MDns::loop() {
 			Query query;
 			Parse_Query(query);
 			if (query.valid) {
-				if (_queryCallback) {
+				if (_callback) {
 					// Since a callback function has been registered, execute it.
-					_queryCallback(&query);
+					_callback->onQuery(&query);
 				}
 			}
 			if (buffer_pointer > data_size) {
 				return false;
 			}
 #ifdef DEBUG_OUTPUT
-			query.Display();
+			if (debug)
+			{
+				query.Display(debug);
+			}
 #endif  // DEBUG_OUTPUT
 		}
 
@@ -117,20 +124,24 @@ bool MDns::loop() {
 			Answer answer;
 			Parse_Answer(answer);
 			if (answer.valid) {
-		    	  if (_answerCallback) {
-		    		  _answerCallback(&answer);
+		    	  if (_callback) {
+		    		  _callback->onAnswer(&answer);
 		    	  }
 			}
 			if (buffer_pointer > data_size) {
 				return false;
 			}
 #ifdef DEBUG_OUTPUT
-			answer.Display();
+			if (debug)
+			{
+				answer.Display(debug);
+			}
 #endif  // DEBUG_OUTPUT
 		}
 
 #ifdef DEBUG_RAW
-		DisplayRawPacket();
+		if (debug)
+			DisplayRawPacket();
 #endif  // DEBUG_RAW
 
 		return true;
@@ -173,7 +184,8 @@ unsigned int MDns::PopulateName(const char *name_buffer) {
 			if (buffer_pointer >= data_size) {
 				buffer_pointer = buffer_pointer_start;
 #ifdef DEBUG_OUTPUT
-				Serial.println(" ERROR. MDns::PopulateName overrun buffer.");
+				if (debug)
+					debug->println(" ERROR. MDns::PopulateName overrun buffer.");
 #endif
 				return 0;
 			}
@@ -182,8 +194,8 @@ unsigned int MDns::PopulateName(const char *name_buffer) {
 				if (buffer_pointer >= data_size) {
 					buffer_pointer = buffer_pointer_start;
 #ifdef DEBUG_OUTPUT
-					Serial.println(
-							" ERROR. MDns::PopulateName overrun buffer.");
+					if (debug)
+						debug->println(" ERROR. MDns::PopulateName overrun buffer.");
 #endif
 					return 0;
 				}
@@ -201,8 +213,8 @@ unsigned int MDns::PopulateName(const char *name_buffer) {
 	if (buffer_pointer >= data_size) {
 		buffer_pointer = buffer_pointer_start;
 #ifdef DEBUG_OUTPUT
-		Serial.println(
-				" ERROR. MDns::PopulateName overrun buffer while finishing.");
+		if (debug)
+			debug->println(" ERROR. MDns::PopulateName overrun buffer while finishing.");
 #endif
 		return 0;
 	}
@@ -214,7 +226,8 @@ unsigned int MDns::PopulateName(const char *name_buffer) {
 bool MDns::AddQuery(const Query &query) {
 	if (answer_count || ns_count || ar_count) {
 #ifdef DEBUG_OUTPUT
-		Serial.println(" ERROR. Resource records included before Queries.");
+		if (debug)
+			debug->println(" ERROR. Resource records included before Queries.");
 #endif
 		return false;
 	}
@@ -227,7 +240,8 @@ bool MDns::AddQuery(const Query &query) {
 	if (PopulateName(query.qname_buffer) == 0
 			|| buffer_pointer + 4 > data_size) {
 #ifdef DEBUG_OUTPUT
-		Serial.println(" ERROR. MDns::AddQuery overrun expected buffer space.");
+		if (debug)
+			debug->println(" ERROR. MDns::AddQuery overrun expected buffer space.");
 #endif
 		return false;
 	}
@@ -256,7 +270,8 @@ bool MDns::AddQuery(const Query &query) {
 bool MDns::AddAnswer(const Answer &answer) {
 	if (ns_count || ar_count) {
 #ifdef DEBUG_OUTPUT
-		Serial.println(" ERROR. NS or AR records added before Answer records");
+		if (debug)
+			debug->println(" ERROR. NS or AR records added before Answer records");
 #endif
 		return false;
 	}
@@ -267,8 +282,8 @@ bool MDns::AddAnswer(const Answer &answer) {
 	if (PopulateName(answer.name_buffer) == 0
 			|| buffer_pointer + 10 > data_size) {
 #ifdef DEBUG_OUTPUT
-		Serial.println(
-				" ERROR. MDns::AddAnswer over-ran expected buffer space.");
+		if (debug)
+			debug->println(" ERROR. MDns::AddAnswer over-ran expected buffer space.");
 #endif
 		return false;
 	}
@@ -313,8 +328,8 @@ bool MDns::AddAnswer(const Answer &answer) {
 	default:
 #ifdef DEBUG_OUTPUT
 		// TODO: Other record types.
-		Serial.println(
-				" **ERROR** Sending this record type not implemented yet.");
+		if (debug)
+			debug->println(" **ERROR** Sending this record type not implemented yet.");
 #endif
 		return false;
 	}
@@ -335,7 +350,8 @@ bool MDns::AddAnswer(const Answer &answer) {
 
 void MDns::Send() const {
 #ifdef DEBUG_OUTPUT
-	Serial.println("Sending UDP multicast packet");
+	if (debug)
+		debug->println("Sending UDP multicast packet");
 	DisplayRawPacket();
 #endif
 	udp->beginPacket(IPAddress(224, 0, 0, 251), MDNS_TARGET_PORT);
@@ -345,7 +361,8 @@ void MDns::Send() const {
 
 void MDns::SendUnicast(IPAddress addr) const {
 #ifdef DEBUG_OUTPUT
-	Serial.println("Sending UDP unicast packet");
+	if (debug)
+		debug->println("Sending UDP unicast packet");
 #endif
 	udp->beginPacket(addr, MDNS_TARGET_PORT);
 	udp->write(data_buffer, data_size);
@@ -353,21 +370,23 @@ void MDns::SendUnicast(IPAddress addr) const {
 }
 
 void MDns::Display() const {
-	Serial.println();
-	Serial.print("Packet size: ");
-	Serial.print(data_size);
-	Serial.print("  ");
-	Serial.println(data_size, HEX);
-	Serial.print(" TYPE: ");
-	Serial.print(type);
-	Serial.print("      QUERY_COUNT: ");
-	Serial.print(query_count);
-	Serial.print("      ANSWER_COUNT: ");
-	Serial.print(answer_count);
-	Serial.print("      NS_COUNT: ");
-	Serial.print(ns_count);
-	Serial.print("      AR_COUNT: ");
-	Serial.println(ar_count);
+	if (debug) {
+		debug->println();
+		debug->print("Packet size: ");
+		debug->print(data_size);
+		debug->print("  ");
+		debug->println(data_size, HEX);
+		debug->print(" TYPE: ");
+		debug->print(type);
+		debug->print("      QUERY_COUNT: ");
+		debug->print(query_count);
+		debug->print("      ANSWER_COUNT: ");
+		debug->print(answer_count);
+		debug->print("      NS_COUNT: ");
+		debug->print(ns_count);
+		debug->print("      AR_COUNT: ");
+		debug->println(ar_count);
+	}
 }
 
 void MDns::Parse_Query(Query &query) {
@@ -393,8 +412,10 @@ void MDns::Parse_Query(Query &query) {
 	if (query.qclass != 0xFF && query.qclass != 0x01) {
 		// QCLASS is not ANY (0xFF) or INternet (0x01).
 #ifdef DEBUG_OUTPUT
-		Serial.print(" **ERROR QCLASS** ");
-		Serial.println(query.qclass, HEX);
+		if (debug) {
+			debug->print(" **ERROR QCLASS** ");
+			debug->println(query.qclass, HEX);
+		}
 #endif
 		query.valid = false;
 	}
@@ -403,10 +424,12 @@ void MDns::Parse_Query(Query &query) {
 		// We've over-run the returned data.
 		// Something has gone wrong receiving or parsing the data.
 #ifdef DEBUG_OUTPUT
-		Serial.print(" **ERROR size** ");
-		Serial.print(buffer_pointer, HEX);
-		Serial.print(" ");
-		Serial.println(data_size, HEX);
+		if (debug) {
+			debug->print(" **ERROR size** ");
+			debug->print(buffer_pointer, HEX);
+			debug->print(" ");
+			debug->println(data_size, HEX);
+		}
 #endif
 		query.valid = false;
 	}
@@ -437,10 +460,12 @@ void MDns::Parse_Answer(Answer &answer) {
 		// We've over-run the returned data.
 		// Something has gone wrong receiving or parsing the data.
 #ifdef DEBUG_OUTPUT
-		Serial.print(" **ERROR size** ");
-		Serial.print(buffer_pointer, HEX);
-		Serial.print(" ");
-		Serial.println(data_size, HEX);
+		if (debug) {
+			debug->print(" **ERROR size** ");
+			debug->print(buffer_pointer, HEX);
+			debug->print(" ");
+			debug->println(data_size, HEX);
+		}
 #endif
 		answer.valid = false;
 		return;
@@ -453,33 +478,35 @@ void MDns::Parse_Answer(Answer &answer) {
 // Display packet contents in HEX.
 void MDns::DisplayRawPacket() const {
 	// display the packet contents in HEX
-	Serial.println("Raw packet");
-	unsigned int i, j;
+	if (debug) {
+		debug->println("Raw packet");
+		unsigned int i, j;
 
-	for (i = 0; i <= data_size; i += 16) {
-		Serial.print("0x");
-		PrintHex(i >> 8);
-		PrintHex(i);
-		Serial.print("   ");
-		for (j = 0; j < 16; j++) {
-			if (i + j >= data_size) {
-				break;
+		for (i = 0; i <= data_size; i += 16) {
+			debug->print("0x");
+			PrintHex(i >> 8);
+			PrintHex(i);
+			debug->print("   ");
+			for (j = 0; j < 16; j++) {
+				if (i + j >= data_size) {
+					break;
+				}
+				if (data_buffer[i + j] > 31 and data_buffer[i + j] < 128) {
+					debug->print((char) data_buffer[i + j]);
+				} else {
+					debug->print(".");
+				}
 			}
-			if (data_buffer[i + j] > 31 and data_buffer[i + j] < 128) {
-				Serial.print((char) data_buffer[i + j]);
-			} else {
-				Serial.print(".");
+			debug->print("    ");
+			for (j = 0; j < 16; j++) {
+				if (i + j >= data_size) {
+					break;
+				}
+				PrintHex(data_buffer[i + j]);
+				debug->print(' ');
 			}
+			debug->println();
 		}
-		Serial.print("    ");
-		for (j = 0; j < 16; j++) {
-			if (i + j >= data_size) {
-				break;
-			}
-			PrintHex(data_buffer[i + j]);
-			Serial.print(' ');
-		}
-		Serial.println();
 	}
 }
 
@@ -648,44 +675,48 @@ int nameFromDnsPointer(char *p_name_buffer, int name_buffer_pos,
 	return packet_buffer_pos;
 }
 
-void Query::Display() const {
+void Query::Display(Print * debug) const {
+	if (debug) {
 #ifdef DEBUG_OUTPUT
-	Serial.print("question  0x");
-	Serial.println(buffer_pointer, HEX);
+		debug->print("question  0x");
+		debug->println(buffer_pointer, HEX);
 #endif
-	if (!valid) {
-		Serial.println(" **ERROR**");
+		if (!valid) {
+			debug->println(" **ERROR**");
+		}
+		debug->print(" QNAME:    ");
+		debug->println(qname_buffer);
+		debug->print(" QTYPE:  0x");
+		debug->print(qtype, HEX);
+		debug->print("      QCLASS: 0x");
+		debug->print(qclass, HEX);
+		debug->print("      Unicast Response: ");
+		debug->println(unicast_response);
 	}
-	Serial.print(" QNAME:    ");
-	Serial.println(qname_buffer);
-	Serial.print(" QTYPE:  0x");
-	Serial.print(qtype, HEX);
-	Serial.print("      QCLASS: 0x");
-	Serial.print(qclass, HEX);
-	Serial.print("      Unicast Response: ");
-	Serial.println(unicast_response);
 }
 
-void Answer::Display() const {
+void Answer::Display(Print * debug) const {
+	if (debug) {
 #ifdef DEBUG_OUTPUT
-	Serial.print("answer  0x");
-	Serial.println(buffer_pointer, HEX);
+		debug->print("answer  0x");
+		debug->println(buffer_pointer, HEX);
 #endif
-	if (!valid) {
-		Serial.println(" **ERROR**");
+		if (!valid) {
+			debug->println(" **ERROR**");
+		}
+		debug->print(" RRNAME:    ");
+		debug->println(name_buffer);
+		debug->print(" RRTYPE:  0x");
+		debug->print(rrtype, HEX);
+		debug->print("      RRCLASS: 0x");
+		debug->print(rrclass, HEX);
+		debug->print("      RRTTL: ");
+		debug->print(rrttl);
+		debug->print("      RRSET: ");
+		debug->println(rrset);
+		debug->print(" RRDATA:    ");
+		debug->println(rdata_buffer);
 	}
-	Serial.print(" RRNAME:    ");
-	Serial.println(name_buffer);
-	Serial.print(" RRTYPE:  0x");
-	Serial.print(rrtype, HEX);
-	Serial.print("      RRCLASS: 0x");
-	Serial.print(rrclass, HEX);
-	Serial.print("      RRTTL: ");
-	Serial.print(rrttl);
-	Serial.print("      RRSET: ");
-	Serial.println(rrset);
-	Serial.print(" RRDATA:    ");
-	Serial.println(rdata_buffer);
 }
 
 } // namespace mdns
