@@ -517,16 +517,12 @@ void MDns::PopulateAnswerResult(Answer *answer) {
 	switch (answer->rrtype) {
 	case MDNS_TYPE_A:  // Returns a 32-bit IPv4 address
 		if (MAX_MDNS_NAME_LEN >= 16) {
-			sprintf(answer->rdata_buffer, "%d.%d.%d.%d",
-					data_buffer[buffer_pointer],
-					data_buffer[buffer_pointer + 1],
-					data_buffer[buffer_pointer + 2],
-					data_buffer[buffer_pointer + 3]);
 			answer->ipAddress = IPAddress(
 					data_buffer[buffer_pointer],
 					data_buffer[buffer_pointer + 1],
 					data_buffer[buffer_pointer + 2],
 					data_buffer[buffer_pointer + 3]);
+			strcpy(answer->rdata_buffer, answer->ipAddress.get_address());
 		} else {
 			sprintf(answer->rdata_buffer, "ipv4");
 		}
@@ -546,37 +542,37 @@ void MDns::PopulateAnswerResult(Answer *answer) {
 				rdlength, data_buffer, buffer_pointer);
 		break;
 	case MDNS_TYPE_AAAA:  // Returns a 128-bit IPv6 address.
-	{
-		int buffer_pos = 0;
-		for (int i = 0; i < rdlength; i++) {
-			if (buffer_pos < MAX_MDNS_NAME_LEN - 3) {
-				sprintf(answer->rdata_buffer + buffer_pos, "%02X:",
-						data_buffer[buffer_pointer++]);
-			} else {
-				buffer_pointer++;
+		{
+			int buffer_pos = 0;
+			for (int i = 0; i < rdlength; i++) {
+				if (buffer_pos < MAX_MDNS_NAME_LEN - 3) {
+					sprintf(answer->rdata_buffer + buffer_pos, "%02X:",
+							data_buffer[buffer_pointer++]);
+				} else {
+					buffer_pointer++;
+				}
+				buffer_pos += 3;
 			}
-			buffer_pos += 3;
+			answer->rdata_buffer[--buffer_pos] = '\0';  // Remove trailing ':'
 		}
-		answer->rdata_buffer[--buffer_pos] = '\0';  // Remove trailing ':'
-	}
 		break;
 	case MDNS_TYPE_SRV:  // Server Selection.
-	{
-		unsigned int priority = (data_buffer[buffer_pointer++] << 8);
-		priority += data_buffer[buffer_pointer++];
-		unsigned int weight = (data_buffer[buffer_pointer++] << 8);
-		weight += data_buffer[buffer_pointer++];
-		unsigned int port = (data_buffer[buffer_pointer++] << 8);
-		port += data_buffer[buffer_pointer++];
-		sprintf(answer->rdata_buffer, "p=%d;w=%d;port=%d;host=", priority,
-				weight, port);
-		answer->port = port;
+		{
+			unsigned int priority = (data_buffer[buffer_pointer++] << 8);
+			priority += data_buffer[buffer_pointer++];
+			unsigned int weight = (data_buffer[buffer_pointer++] << 8);
+			weight += data_buffer[buffer_pointer++];
+			unsigned int port = (data_buffer[buffer_pointer++] << 8);
+			port += data_buffer[buffer_pointer++];
+			sprintf(answer->rdata_buffer, "p=%d;w=%d;port=%d;host=", priority,
+					weight, port);
+			answer->port = port;
 
-		buffer_pointer = nameFromDnsPointer(answer->rdata_buffer,
-				strlen(answer->rdata_buffer),
-				MAX_MDNS_NAME_LEN - strlen(answer->rdata_buffer) - 1,
-				data_buffer, buffer_pointer);
-	}
+			buffer_pointer = nameFromDnsPointer(answer->rdata_buffer,
+					strlen(answer->rdata_buffer),
+					MAX_MDNS_NAME_LEN - strlen(answer->rdata_buffer) - 1,
+					data_buffer, buffer_pointer);
+		}
 		break;
 	default: {
 		int buffer_pos = 0;

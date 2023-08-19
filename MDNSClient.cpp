@@ -23,21 +23,21 @@ IPAddress MDNSClient::lookupHost(const char *hostName, uint16_t timeout) {
 	_mdns->setCallback(this);
 	unsigned long startedAt = millis();
 	_mdns->Clear();
-	struct Query query_host;
-	strncpy(query_host.qname_buffer, question, MAX_MDNS_NAME_LEN);
-	query_host.qtype = MDNS_TYPE_A;
-	query_host.qclass = 1;    // "INternet"
-	query_host.unicast_response = 0;
-	_mdns->AddQuery(query_host);
+	struct Query query;
+	query.qclass = 1;    // "INternet"
+	query.qtype = MDNS_TYPE_A;
+	query.unicast_response = 0;
+	strncpy(query.qname_buffer, question, MAX_MDNS_NAME_LEN);
+	_mdns->AddQuery(query);
 	lookupType = LOOKUP_HOST;
 	clearHostsCache();
 	_mdns->Send();
 
 	while (millis() - startedAt < timeout) {
 		_mdns->loop();
-		if(hosts[0][HOSTS_HOST_NAME] == question and addresses[0] != INADDR_NONE)
+		if(hosts[0].host == question and hosts[0].ip != INADDR_NONE)
 		{
-			result = addresses[0];
+			result = hosts[0].ip;
 			break;
 		}
 	}
@@ -58,10 +58,10 @@ int MDNSClient::lookupService(const char *svcName, uint16_t timeout) {
 	unsigned long startedAt = millis();
 	_mdns->Clear();
 	struct Query query;
-	strncpy(query.qname_buffer, question, MAX_MDNS_NAME_LEN);
-	query.qtype = MDNS_TYPE_PTR;
 	query.qclass = 1;    // "INternet"
+	query.qtype = MDNS_TYPE_PTR;
 	query.unicast_response = 0;
+	strncpy(query.qname_buffer, question, MAX_MDNS_NAME_LEN);
 	_mdns->AddQuery(query);
 	lookupType = LOOKUP_SERVICE;
 	clearHostsCache();
@@ -69,11 +69,11 @@ int MDNSClient::lookupService(const char *svcName, uint16_t timeout) {
 
 	while (millis() - startedAt < timeout) {
 		_mdns->loop();
-//		if(hosts[0][HOSTS_HOST_NAME] == question and addresses[0] != INADDR_NONE)
-//		{
-//			result = addresses[0];
-//			break;
-//		}
+		/*
+======================= RESULTS ===================
+>  MQTT on bmax1._mqtt._tcp.local    1883    bmax1.local    192.168.4.101
+===================================================
+		 * */
 	}
 	lookupType = LOOKUP_NONE;
 	_mdns->setCallback(oldCallback);
@@ -97,15 +97,15 @@ void MDNSClient::onAnswer(const Answer *answer) {
 
 	Serial.println("======================= RESULTS ===================");
 	for (int i = 0; i < MAX_HOSTS; ++i) {
-		if (hosts[i][HOSTS_SERVICE_NAME] != "" || hosts[i][HOSTS_HOST_NAME] != "") {
+		if (hosts[i].service != "" || hosts[i].host != "") {
 			Serial.print(">  ");
-			Serial.print(hosts[i][HOSTS_SERVICE_NAME]);
+			Serial.print(hosts[i].service);
 			Serial.print("    ");
-			Serial.print(hosts[i][HOSTS_PORT]);
+			Serial.print(hosts[i].port);
 			Serial.print("    ");
-			Serial.print(hosts[i][HOSTS_HOST_NAME]);
+			Serial.print(hosts[i].host);
 			Serial.print("    ");
-			Serial.println(hosts[i][HOSTS_ADDRESS]);
+			Serial.println(hosts[i].ip);
 		}
 	}
 	Serial.println("===================================================");
@@ -118,9 +118,8 @@ void MDNSClient::processHostAnswer(const Answer* answer) {
 	//   name:    twinkle.local
 	//   address: 192.168.192.9
 	if (answer->rrtype == MDNS_TYPE_A and strcmp(answer->name_buffer, question) == 0 ) {
-		hosts[0][HOSTS_HOST_NAME] = answer->name_buffer;
-		hosts[0][HOSTS_ADDRESS] = answer->rdata_buffer;
-		addresses[0] = answer->ipAddress;
+		hosts[0].host = answer->name_buffer;
+		hosts[0].ip = answer->ipAddress;
 	}
 }
 
@@ -133,13 +132,13 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 			and strstr(answer->name_buffer, question) != 0) {
 		unsigned int i = 0;
 		for (; i < MAX_HOSTS; ++i) {
-			if (hosts[i][HOSTS_SERVICE_NAME] == answer->rdata_buffer) {
+			if (hosts[i].service == answer->rdata_buffer) {
 				// Already in hosts[][].
 				break;
 			}
-			if (hosts[i][HOSTS_SERVICE_NAME] == "") {
+			if (hosts[i].service == "") {
 				// This hosts[][] entry is still empty.
-				hosts[i][HOSTS_SERVICE_NAME] = answer->rdata_buffer;
+				hosts[i].service = answer->rdata_buffer;
 				break;
 			}
 		}
@@ -162,9 +161,16 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 	if (answer->rrtype == MDNS_TYPE_SRV) {
 		unsigned int i = 0;
 		for (; i < MAX_HOSTS; ++i) {
-			if (hosts[i][HOSTS_SERVICE_NAME] == answer->name_buffer) {
+			if (hosts[i].service == answer->name_buffer) {
 				// This hosts entry matches the name of the host we are looking for
 				// so parse data for port and hostname.
+				hosts[i].port = answer->port;
+				char *host_start = strstr(answer->rdata_buffer, "host=");
+				if (host_start) {
+					host_start += 5;
+					hosts[i].host = host_start;
+				}
+				/*
 				char *port_start = strstr(answer->rdata_buffer, "port=");
 				if (port_start) {
 					port_start += 5;
@@ -177,11 +183,12 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 						char *host_start = strstr(port_end, "host=");
 						if (host_start) {
 							host_start += 5;
-							hosts[i][HOSTS_PORT] = port;
-							hosts[i][HOSTS_HOST_NAME] = host_start;
+							hosts[i].port = atoi(port);
+							hosts[i].host = host_start;
 						}
 					}
 				}
+				*/
 				break;
 			}
 		}
@@ -201,9 +208,8 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 	if (answer->rrtype == MDNS_TYPE_A) {
 		int i = 0;
 		for (; i < MAX_HOSTS; ++i) {
-			if (hosts[i][HOSTS_HOST_NAME] == answer->name_buffer) {
-				hosts[i][HOSTS_ADDRESS] = answer->rdata_buffer;
-				addresses[i] = answer->ipAddress;
+			if (hosts[i].host == answer->name_buffer) {
+				hosts[i].ip = answer->ipAddress;
 				break;
 			}
 		}

@@ -18,6 +18,13 @@
 
 using namespace mdns;
 
+struct HostInfo {
+	String service;
+	String host;
+	uint16_t port;
+	IPAddress ip;
+};
+
 class MDNSClient : public Callback {
 public:
 	enum LookupType {
@@ -32,18 +39,17 @@ public:
 	virtual void onAnswer(const Answer* answer);
 private:
 	MDns * _mdns;
-	String hosts[MAX_HOSTS][4];  // Array containing information about hosts received over mDNS.
-	IPAddress addresses[MAX_HOSTS];
+	HostInfo hosts[MAX_HOSTS];
 	char * question = NULL;
 	LookupType lookupType = LOOKUP_NONE;
 	void processHostAnswer(const Answer* answer);
 	void processServiceAnswer(const Answer* answer);
 	void clearHostsCache() {
 		for (int i = 0; i < MAX_HOSTS; i++) {
-			for (int j = 0; j < MAX_HOSTS; j++) {
-				hosts[i][j] = "";
-			}
-			addresses[i] = INADDR_NONE;
+			hosts[i].host = "";
+			hosts[i].service = "";
+			hosts[i].ip = INADDR_NONE;
+			hosts[i].port = 0;
 		}
 	}
 };
