@@ -7,8 +7,9 @@
 
 #include "MDNSClient.h"
 
-MDNSClient::MDNSClient(mdns::MDns &mdns) {
+MDNSClient::MDNSClient(mdns::MDns &mdns, Print& debug) {
 	_mdns = &mdns;
+	_debug = &debug;
 }
 
 MDNSClient::~MDNSClient() {
@@ -69,11 +70,14 @@ int MDNSClient::lookupService(const char *svcName, uint16_t timeout) {
 
 	while (millis() - startedAt < timeout) {
 		_mdns->loop();
-		/*
-======================= RESULTS ===================
->  MQTT on bmax1._mqtt._tcp.local    1883    bmax1.local    192.168.4.101
-===================================================
-		 * */
+		for (int i = 0; i < MAX_HOSTS; i++) {
+			if (hosts[i].host != "" and hosts[i].service != "" and hosts[i].port != 0 and hosts[i].ip != INADDR_NONE) {
+				result++;
+			}
+		}
+		if (result > 0) {
+			break;
+		}
 	}
 	lookupType = LOOKUP_NONE;
 	_mdns->setCallback(oldCallback);
@@ -95,20 +99,24 @@ void MDNSClient::onAnswer(const Answer *answer) {
 			break;
 	}
 
-	Serial.println("======================= RESULTS ===================");
-	for (int i = 0; i < MAX_HOSTS; ++i) {
-		if (hosts[i].service != "" || hosts[i].host != "") {
-			Serial.print(">  ");
-			Serial.print(hosts[i].service);
-			Serial.print("    ");
-			Serial.print(hosts[i].port);
-			Serial.print("    ");
-			Serial.print(hosts[i].host);
-			Serial.print("    ");
-			Serial.println(hosts[i].ip);
+#ifdef DEBUG_OUTPUT
+	if (_debug) {
+		_debug->println("======================= RESULTS ===================");
+		for (int i = 0; i < MAX_HOSTS; ++i) {
+			if (hosts[i].service != "" || hosts[i].host != "") {
+				_debug->print(">  ");
+				_debug->print(hosts[i].service);
+				_debug->print("    ");
+				_debug->print(hosts[i].port);
+				_debug->print("    ");
+				_debug->print(hosts[i].host);
+				_debug->print("    ");
+				_debug->println(hosts[i].ip);
+			}
 		}
+		_debug->println("===================================================");
 	}
-	Serial.println("===================================================");
+#endif
 }
 
 
@@ -142,15 +150,15 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 				break;
 			}
 		}
-		if (i == MAX_HOSTS) {
-			Serial.print(" ** ERROR ** No space in buffer for ");
-			Serial.print('"');
-			Serial.print(answer->name_buffer);
-			Serial.print('"');
-			Serial.print("  :  ");
-			Serial.print('"');
-			Serial.println(answer->rdata_buffer);
-			Serial.print('"');
+		if (i == MAX_HOSTS and _debug) {
+			_debug->print(" ** ERROR ** No space in buffer for ");
+			_debug->print('"');
+			_debug->print(answer->name_buffer);
+			_debug->print('"');
+			_debug->print("  :  ");
+			_debug->print('"');
+			_debug->println(answer->rdata_buffer);
+			_debug->print('"');
 		}
 	}
 
@@ -170,34 +178,15 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 					host_start += 5;
 					hosts[i].host = host_start;
 				}
-				/*
-				char *port_start = strstr(answer->rdata_buffer, "port=");
-				if (port_start) {
-					port_start += 5;
-					char *port_end = strchr(port_start, ';');
-					char port[1 + port_end - port_start];
-					strncpy(port, port_start, port_end - port_start);
-					port[port_end - port_start] = '\0';
-
-					if (port_end) {
-						char *host_start = strstr(port_end, "host=");
-						if (host_start) {
-							host_start += 5;
-							hosts[i].port = atoi(port);
-							hosts[i].host = host_start;
-						}
-					}
-				}
-				*/
 				break;
 			}
 		}
-		if (i == MAX_HOSTS) {
-			Serial.print(" Did not find ");
-			Serial.print('"');
-			Serial.print(answer->name_buffer);
-			Serial.print('"');
-			Serial.println(" in hosts buffer.");
+		if (i == MAX_HOSTS and _debug) {
+			_debug->print(" Did not find ");
+			_debug->print('"');
+			_debug->print(answer->name_buffer);
+			_debug->print('"');
+			_debug->println(" in hosts buffer.");
 		}
 	}
 
@@ -213,12 +202,12 @@ void MDNSClient::processServiceAnswer(const Answer* answer) {
 				break;
 			}
 		}
-		if (i == MAX_HOSTS) {
-			Serial.print(" Did not find ");
-			Serial.print('"');
-			Serial.print(answer->name_buffer);
-			Serial.print('"');
-			Serial.println(" in hosts buffer.");
+		if (i == MAX_HOSTS and _debug) {
+			_debug->print(" Did not find ");
+			_debug->print('"');
+			_debug->print(answer->name_buffer);
+			_debug->print('"');
+			_debug->println(" in hosts buffer.");
 		}
 	}
 }

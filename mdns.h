@@ -3,12 +3,11 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-//#include <WiFiUdp.h>
 #include <wifi_Udp.h>
 
-#define DEBUG_STATISTICS      // Record how many incoming packets fitted into data_buffer.
-#define DEBUG_OUTPUT          // Send packet summaries to Serial.
-#define DEBUG_RAW             // Send HEX and ASCII encoded raw packet to Serial.
+//#define DEBUG_STATISTICS      // Record how many incoming packets fitted into data_buffer.
+//#define DEBUG_OUTPUT          // Send packet summaries to Serial.
+//#define DEBUG_RAW             // Send HEX and ASCII encoded raw packet to Serial.
 
 #define MDNS_TYPE_A     0x0001
 #define MDNS_TYPE_PTR   0x000C

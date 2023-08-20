@@ -51,11 +51,12 @@ bool MDns::loop() {
 		// but first save the source and destination IP
 		srcIP = udp->remoteIP();
 		data_size = udp->read(data_buffer, max_packet_size);
+
+#ifdef DEBUG_STATISTICS
 		if(data_size > largest_packet_seen)
 		{
 			largest_packet_seen = data_size;
 		}
-#ifdef DEBUG_STATISTICS
 		if(data_size > max_packet_size) {
 			buffer_size_fail++;
 			data_size = max_packet_size;

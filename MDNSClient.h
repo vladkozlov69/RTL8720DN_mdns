@@ -32,12 +32,13 @@ public:
 		LOOKUP_HOST,
 		LOOKUP_SERVICE
 	};
-	MDNSClient(MDns& mdns);
+	MDNSClient(MDns& mdns, Print& debug = Serial);
 	virtual ~MDNSClient();
 	IPAddress lookupHost(const char * hostName, uint16_t timeout = 5000);
 	int lookupService(const char *svcName, uint16_t timeout = 5000);
 	virtual void onAnswer(const Answer* answer);
 private:
+	Print * _debug;
 	MDns * _mdns;
 	HostInfo hosts[MAX_HOSTS];
 	char * question = NULL;
