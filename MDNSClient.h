@@ -33,6 +33,7 @@ public:
 		LOOKUP_SERVICE
 	};
 	MDNSClient(MDns& mdns, Print& debug = Serial);
+	MDNSClient(MDns * mdns, Print * debug = &Serial);
 	virtual ~MDNSClient();
 	IPAddress lookupHost(const char * hostName, uint16_t timeout = 5000);
 	int lookupService(const char *svcName, uint16_t timeout = 5000);

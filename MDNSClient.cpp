@@ -12,6 +12,11 @@ MDNSClient::MDNSClient(mdns::MDns &mdns, Print& debug) {
 	_debug = &debug;
 }
 
+MDNSClient::MDNSClient(mdns::MDns * mdns, Print * debug) {
+	_mdns = mdns;
+	_debug = debug;
+}
+
 MDNSClient::~MDNSClient() {
 	// TODO Auto-generated destructor stub
 }
